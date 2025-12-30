@@ -12,83 +12,116 @@ import {
   History,
   HardDrive,
   Globe,
+  Clock,
 } from 'lucide-react';
 import { LaneManager } from './services/laneState';
 import { Transaction, Lane } from './types';
 import { BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+
+const BATCH_INTERVAL = 120000; // 2 minutes in ms
 
 const App: React.FC = () => {
   const [lanes, setLanes] = useState<Lane[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLive, setIsLive] = useState(true);
   const [oraclePrice] = useState(145.20);
-  const [lastProcessedTimestamp, setLastProcessedTimestamp] = useState(Date.now());
+  const [nextUpdateIn, setNextUpdateIn] = useState(BATCH_INTERVAL);
   const [dataPacketsSent, setDataPacketsSent] = useState(0);
 
   const laneManagerRef = useRef(new LaneManager());
 
+  // Initialize lanes
   useEffect(() => {
     setLanes(laneManagerRef.current.getLanes());
   }, []);
 
+  // Slot simulation (Internal state still follows Solana time)
   useEffect(() => {
     if (!isLive) return;
     const interval = setInterval(() => {
       laneManagerRef.current.onNewSlot();
       setLanes(laneManagerRef.current.getLanes());
-      setDataPacketsSent(prev => prev + 1);
     }, 400);
     return () => clearInterval(interval);
   }, [isLive]);
 
-  const generateRandomTx = useCallback(() => {
-    const isBot = Math.random() > 0.75;
-    const cu = isBot ? Math.floor(Math.random() * 280000 + 120000) : Math.floor(Math.random() * 60000 + 30000);
-    const amount = Math.floor(Math.random() * 1500 + 10);
-    const now = Date.now();
-    const delta = now - lastProcessedTimestamp;
+  // Batch Data Generation (Simulating Polling every 2 mins)
+  const fetchBatchTransactions = useCallback(() => {
+    const batchSize = Math.floor(Math.random() * 8) + 5; // Generate 5-12 txs per poll
+    const newTxs: Transaction[] = [];
     
-    const currentLanes = laneManagerRef.current.getLanes();
-    const lane0Depleted = currentLanes[0].capacity < currentLanes[0].maxCapacity * 0.5;
-    const isToxic = cu > 210000 || (delta < 200 && lane0Depleted);
-    
-    let reason = "";
-    if (cu > 210000) reason = "Turbulent CU Load (MEV Calc detected)";
-    else if (delta < 200 && lane0Depleted) reason = "L0 Backfill Snipe (Stale quote attack)";
+    for (let i = 0; i < batchSize; i++) {
+      const isBot = Math.random() > 0.75;
+      const cu = isBot ? Math.floor(Math.random() * 280000 + 120000) : Math.floor(Math.random() * 60000 + 30000);
+      const amount = Math.floor(Math.random() * 1500 + 10);
+      const now = Date.now() - (i * 2000); // Stagger timestamps slightly back
+      
+      const currentLanes = laneManagerRef.current.getLanes();
+      const lane0Depleted = currentLanes[0].capacity < currentLanes[0].maxCapacity * 0.5;
+      
+      // Heuristic: 210k CU is the manual SetComputeUnitLimit fingerprint for MEV
+      const isToxic = cu > 210000 || (lane0Depleted && Math.random() > 0.5);
+      
+      let reason = "";
+      if (cu > 210000) reason = "Turbulent CU Load (MEV Fingerprint)";
+      else if (isToxic) reason = "Backfill Snipe Pattern";
 
-    const sim = laneManagerRef.current.simulateSwap(amount, oraclePrice);
-    laneManagerRef.current.executeSwap(amount);
+      const sim = laneManagerRef.current.simulateSwap(amount, oraclePrice);
+      laneManagerRef.current.executeSwap(amount);
 
-    const newTx: Transaction = {
-      signature: Math.random().toString(36).substring(2, 12).toUpperCase(),
-      slot: Math.floor(now / 400),
-      timestamp: now,
-      computeUnits: cu,
-      type: isBot ? 'ARBITRAGE' : 'SWAP',
-      inputAmount: amount,
-      outputAmount: sim.realizedOutput,
-      realizedPrice: sim.realizedOutput / amount,
-      isToxic,
-      reason
-    };
+      newTxs.push({
+        signature: Math.random().toString(36).substring(2, 12).toUpperCase(),
+        slot: Math.floor(now / 400),
+        timestamp: now,
+        computeUnits: cu,
+        type: isBot ? 'ARBITRAGE' : 'SWAP',
+        inputAmount: amount,
+        outputAmount: sim.realizedOutput,
+        realizedPrice: sim.realizedOutput / amount,
+        isToxic,
+        reason
+      });
+    }
 
-    setTransactions(prev => [newTx, ...prev.slice(0, 50)]);
-    setLastProcessedTimestamp(now);
+    setTransactions(prev => [...newTxs, ...prev].slice(0, 100));
+    setDataPacketsSent(prev => prev + 1);
     setLanes(laneManagerRef.current.getLanes());
-  }, [lastProcessedTimestamp, oraclePrice]);
+    setNextUpdateIn(BATCH_INTERVAL);
+  }, [oraclePrice]);
 
+  // Initial fetch
+  useEffect(() => {
+    fetchBatchTransactions();
+  }, []);
+
+  // Polling Timer
   useEffect(() => {
     if (!isLive) return;
+    
     const timer = setInterval(() => {
-      if (Math.random() > 0.3) generateRandomTx();
-    }, 1200);
+      setNextUpdateIn(prev => {
+        if (prev <= 1000) {
+          fetchBatchTransactions();
+          return BATCH_INTERVAL;
+        }
+        return prev - 1000;
+      });
+    }, 1000);
+
     return () => clearInterval(timer);
-  }, [isLive, generateRandomTx]);
+  }, [isLive, fetchBatchTransactions]);
+
+  const formatCountdown = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="min-h-screen relative flex flex-col gap-8 pb-16 px-4 md:px-8 max-w-[1500px] mx-auto z-10">
       
-      {/* HEADER: ARTISTIC FLOAT */}
+      {/* HEADER */}
       <header className="mt-8 flex flex-col md:flex-row justify-between items-center glass p-6 rounded-[2.5rem] shadow-2xl border-white/80 animate-in">
         <div className="flex items-center gap-6">
           <div className="relative animate-float">
@@ -100,12 +133,14 @@ const App: React.FC = () => {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-4xl font-black text-blue-900 tracking-tight font-art -mb-1">ToxicGuard</h1>
-              <span className="text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded-full font-bold uppercase tracking-widest">v2.4.Fluid</span>
+              <span className="text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded-full font-bold uppercase tracking-widest">v2.5.Polling</span>
             </div>
             <div className="flex items-center gap-3 mt-1">
               <div className="flex items-center gap-1.5">
-                <div className={`w-2.5 h-2.5 rounded-full ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                <span className="text-xs font-black text-blue-900/60 tracking-wide uppercase">{isLive ? 'Feed: Live' : 'Feed: Paused'}</span>
+                <div className={`w-2.5 h-2.5 rounded-full ${isLive ? 'bg-amber-500 animate-pulse' : 'bg-rose-500'}`} />
+                <span className="text-xs font-black text-blue-900/60 tracking-wide uppercase">
+                  {isLive ? `Next Poll in: ${formatCountdown(nextUpdateIn)}` : 'Polling Paused'}
+                </span>
               </div>
             </div>
           </div>
@@ -113,19 +148,25 @@ const App: React.FC = () => {
 
         <div className="flex items-center gap-8 mt-6 md:mt-0">
           <button 
+            onClick={fetchBatchTransactions}
+            className="flex items-center gap-2 px-6 py-4 rounded-full font-black text-xs tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-all shadow-sm"
+          >
+            <Clock size={16} /> REFRESH NOW
+          </button>
+          <button 
             onClick={() => setIsLive(!isLive)}
             className={`group relative flex items-center gap-2 px-10 py-4 rounded-full font-black text-sm tracking-[0.1em] transition-all shadow-xl active:scale-95 ${
               isLive ? 'bg-white text-blue-600 border border-blue-100' : 'bg-blue-600 text-white shadow-blue-200'
             }`}
           >
-            {isLive ? <><Droplets size={18} /> PAUSE STREAM</> : <><Wind size={18} /> RESUME STREAM</>}
+            {isLive ? <><Droplets size={18} /> PAUSE POLLING</> : <><Wind size={18} /> RESUME POLLING</>}
           </button>
         </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* CENTER COLUMN: ENLARGED LOGS */}
+        {/* CENTER COLUMN: BATCH LOGS */}
         <div className="lg:col-span-8 flex flex-col gap-8">
           <section className="glass rounded-[3rem] overflow-hidden shadow-2xl border-white/80 animate-in">
             <div className="p-10 border-b border-blue-100 bg-white/40 flex justify-between items-center">
@@ -134,8 +175,8 @@ const App: React.FC = () => {
                   <History className="text-white" size={28} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black text-blue-900 uppercase tracking-widest">Intercept Console</h2>
-                  <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em] mt-0.5">Real-time toxic flow surveillance</p>
+                  <h2 className="text-xl font-black text-blue-900 uppercase tracking-widest">Batch Intercept Console</h2>
+                  <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em] mt-0.5">Every 2 Minutes - Non-Realtime Archive</p>
                 </div>
               </div>
               <button 
@@ -181,7 +222,7 @@ const App: React.FC = () => {
                           {tx.isToxic ? (
                             <div className="group relative flex items-center gap-2 px-5 py-2 bg-rose-600 text-white rounded-full shadow-lg shadow-rose-200 animate-in">
                               <AlertCircle size={14} />
-                              <span className="text-[9px] font-black uppercase tracking-widest">TOXIC_DETECTION</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest">TOXIC_BOT</span>
                               {tx.reason && (
                                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1 bg-slate-900 text-white text-[8px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
                                   {tx.reason}
@@ -203,7 +244,7 @@ const App: React.FC = () => {
               {transactions.length === 0 && (
                 <div className="p-32 text-center">
                   <Waves className="mx-auto text-blue-200 animate-bounce mb-6 opacity-30" size={64} />
-                  <p className="text-blue-900/30 font-black text-sm uppercase tracking-[0.5em]">Establishing Secure Flow</p>
+                  <p className="text-blue-900/30 font-black text-sm uppercase tracking-[0.5em]">Establishing Polled Flow</p>
                 </div>
               )}
             </div>
@@ -218,25 +259,25 @@ const App: React.FC = () => {
               <div className="w-12 h-12 flex items-center justify-center bg-cyan-100 rounded-2xl text-cyan-600 shadow-inner">
                 <Globe size={24} />
               </div>
-              <h2 className="text-xl font-black text-blue-900 uppercase tracking-widest leading-none">Global Stream</h2>
+              <h2 className="text-xl font-black text-blue-900 uppercase tracking-widest leading-none">Polling Stream</h2>
             </div>
 
             <div className={`p-8 rounded-[2.5rem] border-2 transition-all duration-700 relative overflow-hidden group ${
-              isLive ? 'bg-white border-emerald-400/30 shadow-2xl shadow-emerald-50' : 'bg-slate-100 border-slate-200'
+              isLive ? 'bg-white border-amber-400/30 shadow-2xl shadow-amber-50' : 'bg-slate-100 border-slate-200'
             }`}>
               <div className="flex justify-between items-center mb-6 relative z-10">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Helius Websocket</span>
-                <span className={`px-4 py-1 rounded-full text-[9px] font-black ${isLive ? 'bg-emerald-500 text-white' : 'bg-slate-400 text-white'}`}>
-                  {isLive ? 'CONNECTED' : 'STANDBY'}
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Helius API Poller</span>
+                <span className={`px-4 py-1 rounded-full text-[9px] font-black ${isLive ? 'bg-amber-500 text-white' : 'bg-slate-400 text-white'}`}>
+                  {isLive ? 'POLLING' : 'IDLE'}
                 </span>
               </div>
               <div className="flex items-center gap-5 relative z-10">
-                <div className={`w-14 h-14 flex items-center justify-center rounded-full transition-all ${isLive ? 'bg-emerald-500 text-white rotate-12 scale-110 shadow-lg' : 'bg-slate-300 text-slate-500'}`}>
+                <div className={`w-14 h-14 flex items-center justify-center rounded-full transition-all ${isLive ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-300 text-slate-500'}`}>
                   <HardDrive size={28} />
                 </div>
                 <div>
-                  <h4 className="text-base font-black text-blue-900 tracking-tight leading-none mb-1">X-Engine Node</h4>
-                  <p className="text-[10px] text-blue-400 font-mono font-bold tracking-widest">LATENCY: 1.2ms</p>
+                  <h4 className="text-base font-black text-blue-900 tracking-tight leading-none mb-1">Batch Node</h4>
+                  <p className="text-[10px] text-blue-400 font-mono font-bold tracking-widest italic">INTERVAL: 2.0 MIN</p>
                 </div>
               </div>
             </div>
@@ -247,8 +288,8 @@ const App: React.FC = () => {
                 <div>
                   <h5 className="text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1">Security Benchmark</h5>
                   <p className="text-[11px] text-blue-800/60 leading-relaxed font-bold">
-                    CU Threshold: <span className="text-rose-500">210,000</span> <br/> 
-                    HFT Window: <span className="text-rose-500">200ms</span>
+                    CU Fingerprint: <span className="text-rose-500">210,000+</span> <br/> 
+                    Mode: <span className="text-blue-600">Encapsulated Polling</span>
                   </p>
                 </div>
               </div>
@@ -256,7 +297,7 @@ const App: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white/80 p-6 rounded-[2.5rem] border border-blue-50 text-center shadow-sm">
-                <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Packets</span>
+                <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batch Count</span>
                 <span className="text-2xl font-mono font-black text-blue-900">{dataPacketsSent.toLocaleString()}</span>
               </div>
               <div className="bg-blue-600 p-6 rounded-[2.5rem] text-center shadow-2xl shadow-blue-100">
@@ -271,22 +312,22 @@ const App: React.FC = () => {
               <div className="w-12 h-12 flex items-center justify-center bg-indigo-100 rounded-2xl text-indigo-600 shadow-inner">
                 <Zap size={24} />
               </div>
-              <h2 className="text-xl font-black text-blue-900 uppercase tracking-widest">Logic Explanation</h2>
+              <h2 className="text-xl font-black text-blue-900 uppercase tracking-widest">Detection Logic</h2>
             </div>
 
             <div className="bg-blue-900 rounded-[2.5rem] p-8 shadow-inner relative overflow-hidden group">
               <div className="relative z-10 font-mono text-[11px] leading-loose space-y-2">
                 <div className="flex gap-4 text-cyan-400">
                   <span className="text-blue-600/60">01</span>
-                  <span>if (cu_load > 210k) &#123;</span>
+                  <span>// Encapsulated Benchmark</span>
                 </div>
-                <div className="flex gap-4 text-white ml-8">
+                <div className="flex gap-4 text-white">
                   <span className="text-blue-600/60">02</span>
-                  <span>// Benchmark based on manual SetLimit</span>
+                  <span>if (cu_load > ENV.CU_BENCHMARK) &#123;</span>
                 </div>
                 <div className="flex gap-4 text-rose-300 ml-8">
                   <span className="text-blue-600/60">03</span>
-                  <span>FLAG_BOT("TURBULENT_MATH");</span>
+                  <span>FLAG_BOT("MATH_OVERLOAD");</span>
                 </div>
                 <div className="flex gap-4 text-cyan-400">
                   <span className="text-blue-600/60">04</span>
@@ -296,8 +337,8 @@ const App: React.FC = () => {
             </div>
             
             <div className="p-6 bg-blue-50 rounded-[2.5rem] border border-blue-100 text-xs text-blue-900/70 leading-relaxed font-bold">
-              <span className="font-black text-blue-900 block mb-2 underline decoration-blue-300">Why 210k CU?</span>
-              Solana's default is 200k. Toxic bots require complex math (e.g. nuking formulas) that exceeds this limit, making manual CU requests a perfect fingerprint for detection.
+              <span className="font-black text-blue-900 block mb-2 underline decoration-blue-300">Non-Realtime Strategy</span>
+              By polling every 2 minutes, we analyze larger data sets for patterns that a real-time stream might miss, identifying bots through persistent high-pressure computation fingerprints.
             </div>
           </section>
         </div>
@@ -311,16 +352,16 @@ const App: React.FC = () => {
               <BarChart className="text-white" size={32} />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-blue-900 uppercase tracking-widest">Lane Fluidity Depth</h2>
+              <h2 className="text-2xl font-black text-blue-900 uppercase tracking-widest">Fluidity Tiers</h2>
               <p className="text-xs text-blue-400 font-bold uppercase tracking-[0.3em] mt-1">Stale quote risk monitoring</p>
             </div>
           </div>
           <div className="flex items-center gap-6 bg-white/60 px-6 py-3 rounded-[2rem] border border-blue-50 shadow-sm">
              <div className="flex items-center gap-2 text-xs font-black text-blue-900/60 uppercase">
-               <div className="w-3 h-3 bg-blue-400 rounded-full shadow-lg shadow-blue-200" /> CALM_STATE
+               <div className="w-3 h-3 bg-blue-400 rounded-full" /> CALM
              </div>
              <div className="flex items-center gap-2 text-xs font-black text-blue-900/60 uppercase">
-               <div className="w-3 h-3 bg-rose-500 rounded-full shadow-lg shadow-rose-200" /> DEPLETION_RISK
+               <div className="w-3 h-3 bg-rose-500 rounded-full" /> DEPLETED
              </div>
           </div>
         </div>
