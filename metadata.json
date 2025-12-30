@@ -1,0 +1,5 @@
+{
+  "name": "Prop AMM Toxic Flow Guard 1230",
+  "description": "A sophisticated Solana Prop AMM state tracker and toxic flow detector that identifies high-frequency sniping bots and CU-heavy bundles using Lane + Half Backfill logic.",
+  "requestFramePermissions": []
+}
