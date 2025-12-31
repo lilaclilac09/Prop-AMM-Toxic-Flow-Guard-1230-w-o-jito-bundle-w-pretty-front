@@ -1,7 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// FIX: Always use a named parameter and obtain the API key exclusively from process.env.API_KEY
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const analyzeTransactionPattern = async (txData: string) => {
   try {
@@ -29,7 +30,8 @@ export const analyzeTransactionPattern = async (txData: string) => {
       }
     });
 
-    return JSON.parse(response.text);
+    // FIX: The text property is used correctly as a property, not a method.
+    return JSON.parse(response.text || '{}');
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
     return null;
