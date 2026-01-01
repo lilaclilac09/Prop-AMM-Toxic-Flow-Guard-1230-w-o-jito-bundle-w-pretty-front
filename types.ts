@@ -7,7 +7,7 @@ export interface Lane {
   isDepleted: boolean;
 }
 
-export type TransactionType = 'SWAP' | 'ARBITRAGE' | 'LIQUIDATION';
+export type TransactionType = 'SWAP' | 'ARBITRAGE' | 'LIQUIDATION' | 'CANCELLATION';
 
 export interface Transaction {
   signature: string;
@@ -20,6 +20,8 @@ export interface Transaction {
   realizedPrice: number;
   isToxic: boolean;
   reason?: string;
+  programId: string; // The Prop AMM ID
+  status: 'SUCCESS' | 'FAILED';
 }
 
 export interface SimulationResult {
