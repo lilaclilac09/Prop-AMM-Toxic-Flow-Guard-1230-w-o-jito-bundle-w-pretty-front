@@ -5,9 +5,10 @@ export interface Lane {
   maxCapacity: number;
   spreadPpm: number;
   isDepleted: boolean;
+  wasConsumedLastSlot: boolean;
 }
 
-export type TransactionType = 'SWAP' | 'ARBITRAGE' | 'LIQUIDATION' | 'CANCELLATION';
+export type TransactionType = 'SWAP' | 'ARBITRAGE' | 'LIQUIDATION' | 'CANCELLATION' | 'SYSTEM';
 
 export interface Transaction {
   signature: string;
@@ -20,7 +21,7 @@ export interface Transaction {
   realizedPrice: number;
   isToxic: boolean;
   reason?: string;
-  programId: string; // The Prop AMM ID
+  programId: string;
   status: 'SUCCESS' | 'FAILED';
 }
 
