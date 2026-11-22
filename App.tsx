@@ -201,12 +201,12 @@ const App: React.FC = () => {
               <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border ${isLive ? 'bg-cyan-50 border-cyan-200 text-cyan-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
                 <div className={`w-1 h-1 rounded-full ${isLive ? 'bg-cyan-500 animate-pulse' : 'bg-rose-500'}`} />
                 <span className="text-[7px] font-black uppercase tracking-widest">
-                  {isLive ? `SCANNING: ${formatCountdown(nextUpdateIn)}` : 'PAUSED'}
+                  {isLive ? `SIMULATING: ${formatCountdown(nextUpdateIn)}` : 'PAUSED'}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-full bg-blue-900/5 border border-blue-900/10">
                 <RefreshCcw size={8} className="text-blue-400 animate-spin-slow" />
-                <span className="text-[7px] font-mono font-bold text-blue-900/40 uppercase">HumidiFi-LaserStream</span>
+                <span className="text-[7px] font-mono font-bold text-blue-900/40 uppercase">Simulated HumidiFi</span>
               </div>
             </div>
           </div>
@@ -214,7 +214,7 @@ const App: React.FC = () => {
 
         <div className="flex items-center gap-4 mt-2 md:mt-0">
           <div className="hidden lg:flex flex-col items-end mr-2">
-            <span className="text-[6px] font-black text-blue-400 uppercase tracking-widest">Global Helius Sync</span>
+            <span className="text-[6px] font-black text-blue-400 uppercase tracking-widest">Demo Webhook ID (not connected)</span>
             <span className="text-[8px] font-mono text-blue-900/60 font-bold">{HELIUS_WEBHOOK_ID.substring(0, 16)}...</span>
           </div>
           <button onClick={() => setIsLive(!isLive)} className={`group flex items-center gap-2 px-5 py-2 rounded-xl font-black text-[9px] tracking-widest transition-all shadow-md ${isLive ? 'bg-blue-900 text-white hover:scale-105' : 'bg-emerald-500 text-white'}`}>
@@ -344,7 +344,7 @@ const App: React.FC = () => {
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-1 h-1 rounded-full bg-cyan-400 animate-ping" />
-                <span className="text-[7px] font-bold text-cyan-600">LIVE</span>
+                <span className="text-[7px] font-bold text-cyan-600">SIMULATED</span>
               </div>
             </div>
             <div className="flex-1 bg-slate-950 rounded-xl p-3 shadow-xl font-mono text-[6.5px] text-cyan-200/50 overflow-hidden relative">
@@ -381,13 +381,13 @@ const App: React.FC = () => {
       {/* FOOTER - Fixed Height */}
       <footer className="flex-none flex flex-col md:flex-row justify-between items-center px-6 gap-2 opacity-60">
         <div className="flex gap-8 text-[8px] font-black text-blue-900 uppercase tracking-[0.3em]">
-          <span>GEYSER_V5_STREAM</span>
-          <span>HUMIDIFI_SYNC_ACTIVE</span>
-          <span>MEV_RESIST_KERN</span>
+          <span>SIMULATED_STREAM</span>
+          <span>NO_LIVE_SYNC</span>
+          <span>DEMO_HEURISTICS</span>
         </div>
         <div className="flex items-center gap-1.5 bg-blue-900/10 px-3 py-1 rounded-full">
           <Zap size={10} className="text-amber-500" />
-          <span className="text-[8px] text-blue-900 font-black uppercase tracking-widest">Solana Mainnet</span>
+          <span className="text-[8px] text-blue-900 font-black uppercase tracking-widest">Simulation — not Solana Mainnet</span>
         </div>
       </footer>
 
